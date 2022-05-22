@@ -30,7 +30,7 @@ if __name__ == '__main__':
     t = time.time()
 
     # Load PyTorch model
-    model = attempt_load(opt.weights, map_location=torch.device('cpu'))  # load FP32 model
+    model = attempt_load(opt.weights, map_location=torch.device('cuda'))  # load FP32 model
     labels = model.names
 
     # Checks
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     opt.img_size = [check_img_size(x, gs) for x in opt.img_size]  # verify img_size are gs-multiples
 
     # Input
-    img = torch.zeros(opt.batch_size, 3, *opt.img_size)  # image size(1,3,320,192) iDetection
+    img = torch.zeros(opt.batch_size, 3, *opt.img_size).to(device='cuda')  # image size(1,3,320,192) iDetection
 
     # Update model
     for k, m in model.named_modules():
@@ -47,48 +47,16 @@ if __name__ == '__main__':
             m.act = Hardswish()  # assign activation
         # if isinstance(m, models.yolo.Detect):
         #     m.forward = m.forward_export  # assign forward (optional)
-    model.model[-1].export = True  # set Detect() layer export=True
+    model.model[-1].export = False  # set Detect() layer export=True
     y = model(img)  # dry run
 
     # TorchScript export
     try:
         print('\nStarting TorchScript export with torch %s...' % torch.__version__)
-        f = opt.weights.replace('.pt', '.torchscript.pt')  # filename
+        f = opt.weights.replace('.pt', '.torchscript')  # filename
         ts = torch.jit.trace(model, img)
         ts.save(f)
-        print('TorchScript export success, saved as %s' % f)
     except Exception as e:
         print('TorchScript export failure: %s' % e)
-
-    # ONNX export
-    try:
-        import onnx
-
-        print('\nStarting ONNX export with onnx %s...' % onnx.__version__)
-        f = opt.weights.replace('.pt', '.onnx')  # filename
-        torch.onnx.export(model, img, f, verbose=False, opset_version=12, input_names=['images'],
-                          output_names=['classes', 'boxes'] if y is None else ['output'])
-
-        # Checks
-        onnx_model = onnx.load(f)  # load onnx model
-        onnx.checker.check_model(onnx_model)  # check onnx model
-        # print(onnx.helper.printable_graph(onnx_model.graph))  # print a human readable model
-        print('ONNX export success, saved as %s' % f)
-    except Exception as e:
-        print('ONNX export failure: %s' % e)
-
-    # CoreML export
-    try:
-        import coremltools as ct
-
-        print('\nStarting CoreML export with coremltools %s...' % ct.__version__)
-        # convert model from torchscript and apply pixel scaling as per detect.py
-        model = ct.convert(ts, inputs=[ct.ImageType(name='image', shape=img.shape, scale=1 / 255.0, bias=[0, 0, 0])])
-        f = opt.weights.replace('.pt', '.mlmodel')  # filename
-        model.save(f)
-        print('CoreML export success, saved as %s' % f)
-    except Exception as e:
-        print('CoreML export failure: %s' % e)
-
-    # Finish
-    print('\nExport complete (%.2fs). Visualize with https://github.com/lutzroeder/netron.' % (time.time() - t))
+    else:
+        print('TorchScript export success, saved as %s' % f)
