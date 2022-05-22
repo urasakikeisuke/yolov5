@@ -7,6 +7,8 @@ Usage:
 import argparse
 import sys
 import time
+import warnings
+warnings.filterwarnings(action="ignore", category=UserWarning)
 
 sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 
@@ -25,7 +27,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
     opt = parser.parse_args()
     opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
-    print(opt)
     set_logging()
     t = time.time()
 
@@ -51,6 +52,7 @@ if __name__ == '__main__':
     y = model(img)  # dry run
 
     # TorchScript export
+    warnings.filterwarnings(action="ignore", category=torch.jit.TracerWarning)
     try:
         print('\nStarting TorchScript export with torch %s...' % torch.__version__)
         f = opt.weights.replace('.pt', '.torchscript')  # filename
